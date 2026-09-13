@@ -1,0 +1,56 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <AssemblyName>PhoneCam</AssemblyName>
+    <RootNamespace>PhoneCam</RootNamespace>
+    <Version>0.1.0</Version>
+    <Product>PhoneCam</Product>
+    <Authors>vittop89</Authors>
+    <Description>Shows an Android phone camera on Windows over USB, for projectors and large screens.</Description>
+    <Copyright>Copyright (c) 2026 vittop89</Copyright>
+    <!-- The UI is web-based and Italian; skip the dozens of WinForms/.NET satellite languages in the portable build. -->
+    <SatelliteResourceLanguages>it</SatelliteResourceLanguages>
+    <!-- The WebView2 package also references its WPF assembly, which clashes with WindowsBase in a WinForms app. -->
+    <MSBuildWarningsAsMessages>$(MSBuildWarningsAsMessages);MSB3277</MSBuildWarningsAsMessages>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <ScrcpyDir>..\..\third_party\scrcpy-win64-v4.1</ScrcpyDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <!-- The WebView2 package's XML docs are only for the editor. -->
+    <PublishReferencesDocumentationFiles>false</PublishReferencesDocumentationFiles>
+  </PropertyGroup>
+
+  <!-- These are started as processes, pushed to the phone or served from disk, so a single-file
+       publish must leave them next to PhoneCam.exe instead of packing them inside it. -->
+  <ItemDefinitionGroup>
+    <None>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </None>
+    <Content>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
+  </ItemDefinitionGroup>
+
+  <ItemGroup>
+    <Content Include="wwwroot\**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="$(ScrcpyDir)\adb.exe" Link="tools\adb.exe" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="$(ScrcpyDir)\AdbWinApi.dll" Link="tools\AdbWinApi.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="$(ScrcpyDir)\AdbWinUsbApi.dll" Link="tools\AdbWinUsbApi.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="$(ScrcpyDir)\scrcpy-server" Link="tools\scrcpy-server" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="$(ScrcpyDir)\LICENSE.txt" Link="tools\LICENSE-scrcpy.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,18 @@
+# Build output
+bin/
+obj/
+dist/
+
+# Downloaded by scripts/fetch-scrcpy.ps1 (third-party binaries are not stored in the repository)
+third_party/
+
+# Local session data written by Claude Code plugins, never part of the project
+ruvector.db
+.swarm/
+.claude-flow/
+
+# IDE
+.vs/
+.vscode/
+*.user
+*.suo
