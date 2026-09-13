@@ -15,9 +15,9 @@ PhoneCam is a small portable Windows app in the spirit of Camo Studio, cut down 
 - **Zoom** and **torch** control.
 - **Rotate, mirror, fit or fill** the picture.
 - **Full screen** for projectors, with a side panel that can be hidden or floated over the image.
-- **Keeps streaming with the phone screen off.**
+- **Keeps streaming with the phone screen off or locked.**
 - **Remembers your settings**, and sets aside lenses the phone refuses to stream (one click brings them back).
-- **Portable**: one folder, no installer, no .NET installation needed.
+- **Download and run**: a single `PhoneCam.exe`, with nothing to install or extract and no .NET installation needed.
 
 ## Requirements
 
@@ -32,11 +32,15 @@ PhoneCam is a small portable Windows app in the spirit of Camo Studio, cut down 
 
 ## Getting started
 
-1. Download `PhoneCam-<version>-win-x64.zip` from the [latest release](https://github.com/vittop89/PhoneCam/releases/latest) and extract it anywhere, a USB stick included.
+1. Download **[PhoneCam.exe](https://github.com/vittop89/PhoneCam/releases/latest/download/PhoneCam.exe)** from the latest release. It can live anywhere, a USB stick included.
 2. On the phone, turn on **USB debugging**: Settings → About phone → tap *Build number* seven times, then Developer options → USB debugging.
 3. Connect the phone to the PC and run `PhoneCam.exe`.
 4. The first time on each PC the phone asks **"Allow USB debugging?"**: tap *Allow*, ticking *Always allow from this computer*.
 5. The picture appears within a few seconds. Double-click it or press **F11** for full screen.
+
+The executable is not code-signed, so the browser may ask you to confirm the download and Windows SmartScreen may say *"Windows protected your PC"*: choose *More info* → *Run anyway*.
+
+On first start PhoneCam unpacks adb and its page, about 10 MB, into `%LOCALAPPDATA%\PhoneCam\app`; later starts reuse them.
 
 While PhoneCam is running, keep closed:
 
@@ -79,10 +83,11 @@ Changing lens, resolution, frame rate or quality restarts the stream, which take
 | *La fotocamera è occupata da un'altra app…* | Close the phone's Camera app or any other app using the camera. PhoneCam retries by itself. |
 | A lens disappears from the list, with a notice | The phone refused to stream that lens: some manufacturers keep extra lenses for their own camera app. *Mostra di nuovo l'obiettivo escluso* brings it back. |
 | *Il telefono non riesce a trasmettere con queste impostazioni* | The phone's encoder rejected the resolution or quality: choose a lower one. |
-| Windows SmartScreen warns about the app | The executable is not code-signed: *More info* → *Run anyway*. |
+| The browser or Windows SmartScreen warns about `PhoneCam.exe` | The executable is not code-signed: keep the download, then *More info* → *Run anyway*. |
+| *PhoneCam non riesce a preparare i suoi file* | The helper files could not be unpacked into `%LOCALAPPDATA%\PhoneCam\app`: check free disk space and that the folder is writable. |
 | Black picture and 0 fps | Update or install the WebView2 Runtime; on Windows N install the Media Feature Pack. |
 
-Settings and a diagnostic log are kept in `%LOCALAPPDATA%\PhoneCam` (`settings.json`, `phonecam.log`).
+Settings, a diagnostic log and the unpacked helper files are kept in `%LOCALAPPDATA%\PhoneCam` (`settings.json`, `phonecam.log`, `app\`).
 
 ## How it works
 
@@ -105,7 +110,7 @@ PhoneCam shows the camera on screen; it does not provide a virtual webcam for Te
 
 ## Tested on
 
-- realme GT Neo 3 150W (RMX3563), Android 14, with Windows 11: 1280×720, 1920×1080 and 3840×2160 at 30 fps. One extra rear lens is reserved by the phone and is set aside automatically.
+- realme GT Neo 3 150W (RMX3563), Android 14, on two Windows PCs: 1280×720, 1600×1200 and 3840×2160 at 30 fps, also with the phone locked. Full HD arrives as 1920×1072, eight rows short, most likely because this phone's encoder works in 16-pixel blocks. One extra rear lens is reserved by the phone and is set aside automatically.
 
 Other phones should work when their manufacturer lets adb use the camera. Reports are welcome in the [issues](https://github.com/vittop89/PhoneCam/issues).
 
@@ -114,15 +119,17 @@ Other phones should work when their manufacturer lets adb use the camera. Report
 Requirements: Windows, the .NET 8 SDK or newer, PowerShell.
 
 ```powershell
-# Download scrcpy 4.1 (adb + scrcpy-server) and verify its SHA-256
+# Download scrcpy 4.1 (adb + scrcpy-server) and check it against the SHA-256 pinned in the script
 .\scripts\fetch-scrcpy.ps1
 
 # Build and run
 dotnet run --project src\PhoneCam
 
-# Portable self-contained build in dist\ (folder and zip)
+# Release build: a single self-contained dist\PhoneCam.exe
 .\scripts\publish.ps1
 ```
+
+A development build uses the files copied next to its executable; the release build carries them inside `PhoneCam.exe` and unpacks them on first start.
 
 Useful switches:
 
@@ -133,6 +140,6 @@ Useful switches:
 ## License
 
 PhoneCam is released under the [MIT License](LICENSE).
-The portable release bundles scrcpy-server and adb (Apache License 2.0), the .NET runtime (MIT) and the WebView2 SDK (Microsoft, BSD-style license): see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+The release executable bundles scrcpy-server and adb (Apache License 2.0), the .NET runtime (MIT) and the WebView2 SDK (Microsoft, BSD-style license): see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 PhoneCam is not affiliated with Genymobile, Google, Microsoft, Reincubate or realme.

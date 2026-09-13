@@ -9,7 +9,7 @@
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <AssemblyName>PhoneCam</AssemblyName>
     <RootNamespace>PhoneCam</RootNamespace>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <Product>PhoneCam</Product>
     <Authors>vittop89</Authors>
     <Description>Shows an Android phone camera on Windows over USB, for projectors and large screens.</Description>
@@ -33,24 +33,26 @@
     <PublishReferencesDocumentationFiles>false</PublishReferencesDocumentationFiles>
   </PropertyGroup>
 
-  <!-- These are started as processes, pushed to the phone or served from disk, so a single-file
-       publish must leave them next to PhoneCam.exe instead of packing them inside it. -->
-  <ItemDefinitionGroup>
-    <None>
-      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
-    </None>
-    <Content>
-      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
-    </Content>
-  </ItemDefinitionGroup>
-
+  <!-- Development builds find these next to the executable, so web changes need no repacking. -->
   <ItemGroup>
-    <Content Include="wwwroot\**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <None Include="$(ScrcpyDir)\adb.exe" Link="tools\adb.exe" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <None Include="$(ScrcpyDir)\AdbWinApi.dll" Link="tools\AdbWinApi.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <None Include="$(ScrcpyDir)\AdbWinUsbApi.dll" Link="tools\AdbWinUsbApi.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <None Include="$(ScrcpyDir)\scrcpy-server" Link="tools\scrcpy-server" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <None Include="$(ScrcpyDir)\LICENSE.txt" Link="tools\LICENSE-scrcpy.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="wwwroot\**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Never" />
+    <None Include="$(ScrcpyDir)\adb.exe" Link="tools\adb.exe" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Never" />
+    <None Include="$(ScrcpyDir)\AdbWinApi.dll" Link="tools\AdbWinApi.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Never" />
+    <None Include="$(ScrcpyDir)\AdbWinUsbApi.dll" Link="tools\AdbWinUsbApi.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Never" />
+    <None Include="$(ScrcpyDir)\scrcpy-server" Link="tools\scrcpy-server" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Never" />
+    <None Include="$(ScrcpyDir)\LICENSE.txt" Link="tools\LICENSE-scrcpy.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+
+  <!-- The release is a single PhoneCam.exe: the same files travel inside it and AppFiles unpacks them. -->
+  <ItemGroup>
+    <EmbeddedResource Include="wwwroot\**" LogicalName="payload/wwwroot/%(RecursiveDir)%(Filename)%(Extension)" WithCulture="false" />
+    <EmbeddedResource Include="$(ScrcpyDir)\adb.exe" LogicalName="payload/tools/adb.exe" WithCulture="false" />
+    <EmbeddedResource Include="$(ScrcpyDir)\AdbWinApi.dll" LogicalName="payload/tools/AdbWinApi.dll" WithCulture="false" />
+    <EmbeddedResource Include="$(ScrcpyDir)\AdbWinUsbApi.dll" LogicalName="payload/tools/AdbWinUsbApi.dll" WithCulture="false" />
+    <EmbeddedResource Include="$(ScrcpyDir)\scrcpy-server" LogicalName="payload/tools/scrcpy-server" WithCulture="false" />
+    <EmbeddedResource Include="$(ScrcpyDir)\LICENSE.txt" LogicalName="payload/tools/LICENSE-scrcpy.txt" WithCulture="false" />
+    <EmbeddedResource Include="..\..\LICENSE" LogicalName="payload/LICENSE.txt" WithCulture="false" />
+    <EmbeddedResource Include="..\..\THIRD-PARTY-NOTICES.md" LogicalName="payload/THIRD-PARTY-NOTICES.md" WithCulture="false" />
   </ItemGroup>
 
 </Project>

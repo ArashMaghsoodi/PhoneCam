@@ -1,7 +1,9 @@
 # Third-party notices
 
 PhoneCam's own code is released under the [MIT License](LICENSE).
-The portable release also contains the following third-party components, redistributed unmodified.
+The release executable also contains the following third-party components, redistributed unmodified.
+Those that must exist as files are unpacked on first start into `%LOCALAPPDATA%\PhoneCam\app\<build>\`,
+together with this notice and PhoneCam's license.
 
 ## scrcpy-server 4.1
 

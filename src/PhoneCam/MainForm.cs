@@ -15,8 +15,8 @@ sealed class MainForm : Form
     readonly WebView2 web = new() { Dock = DockStyle.Fill, DefaultBackgroundColor = Background };
     readonly System.Windows.Forms.Timer pollTimer = new() { Interval = 2000 };
     readonly Settings settings = Settings.Load();
-    readonly Adb adb = new(Path.Combine(AppContext.BaseDirectory, "tools", "adb.exe"));
-    readonly string serverJar = Path.Combine(AppContext.BaseDirectory, "tools", "scrcpy-server");
+    readonly Adb adb = new(AppFiles.AdbExe);
+    readonly string serverJar = AppFiles.ServerJar;
     readonly string logPath = Path.Combine(Settings.Folder, "phonecam.log");
     readonly object logLock = new();
     readonly string? selfTestInput;
@@ -90,7 +90,7 @@ sealed class MainForm : Form
         core.Settings.AreBrowserAcceleratorKeysEnabled = debug;
         core.Settings.IsStatusBarEnabled = false;
         core.Settings.IsZoomControlEnabled = false;
-        core.SetVirtualHostNameToFolderMapping("phonecam.example", Path.Combine(AppContext.BaseDirectory, "wwwroot"), CoreWebView2HostResourceAccessKind.Allow);
+        core.SetVirtualHostNameToFolderMapping("phonecam.example", AppFiles.WebRoot, CoreWebView2HostResourceAccessKind.Allow);
         core.WebMessageReceived += OnWebMessage;
         core.Navigate("https://phonecam.example/index.html");
     }

@@ -1,11 +1,11 @@
 <#
 .SYNOPSIS
-    Builds the portable PhoneCam into dist\PhoneCam and zips it.
+    Builds the release PhoneCam.exe into dist\.
 
 .DESCRIPTION
-    The build is self-contained (the .NET runtime is inside PhoneCam.exe), so the target PC
-    needs neither .NET nor an installer. adb, scrcpy-server and the web page stay as loose
-    files next to the executable because they are started or served from disk.
+    The result is one self-contained executable: the .NET runtime, adb, scrcpy-server and the
+    web page are all inside it, and it unpacks what must exist on disk into
+    %LOCALAPPDATA%\PhoneCam\app on first start. The target PC needs nothing else.
 #>
 [CmdletBinding()]
 param()
@@ -16,14 +16,12 @@ $root = Split-Path -Parent $PSScriptRoot
 & (Join-Path $PSScriptRoot 'fetch-scrcpy.ps1')
 
 $project = Join-Path $root 'src\PhoneCam\PhoneCam.csproj'
-$version = ([xml](Get-Content $project -Raw)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
 $dist = Join-Path $root 'dist'
-$out = Join-Path $dist 'PhoneCam'
-if (Test-Path $out) {
-    Remove-Item $out -Recurse -Force
+if (Test-Path $dist) {
+    Remove-Item $dist -Recurse -Force
 }
 
-dotnet publish $project -c Release -r win-x64 --self-contained true -o $out `
+dotnet publish $project -c Release -r win-x64 --self-contained true -o $dist `
     -p:PublishSingleFile=true `
     -p:IncludeNativeLibrariesForSelfExtract=true `
     -p:EnableCompressionInSingleFile=true `
@@ -32,11 +30,11 @@ if ($LASTEXITCODE -ne 0) {
     throw 'dotnet publish failed'
 }
 
-Copy-Item (Join-Path $root 'LICENSE'), (Join-Path $root 'THIRD-PARTY-NOTICES.md') $out
-
-$zip = Join-Path $dist "PhoneCam-$version-win-x64.zip"
-if (Test-Path $zip) {
-    Remove-Item $zip
+$exe = Join-Path $dist 'PhoneCam.exe'
+$unexpected = Get-ChildItem $dist -File | Where-Object Name -ne 'PhoneCam.exe'
+if ($unexpected) {
+    throw "Unexpected files next to PhoneCam.exe: $($unexpected.Name -join ', ')"
 }
-Compress-Archive -Path $out -DestinationPath $zip
-Write-Host "Portable build: $zip"
+$hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+Write-Host "Release build: $exe"
+Write-Host "SHA-256: $hash"
