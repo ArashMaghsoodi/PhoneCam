@@ -32,7 +32,7 @@ PhoneCam starts this server on the phone through adb and talks to it with its ow
 
 ## Microsoft Edge WebView2 SDK 1.0.4191.47
 
-- Bundled inside `PhoneCam.exe` (managed wrappers and `WebView2Loader.dll`).
+- The managed wrappers are bundled inside `PhoneCam.exe`; `webview2/WebView2Loader.dll` is unpacked on first start.
   The WebView2 Runtime itself is not included: PhoneCam uses the one installed in Windows.
 - License:
 

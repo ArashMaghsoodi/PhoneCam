@@ -74,6 +74,9 @@ sealed class MainForm : Form
         base.OnLoad(e);
         try
         {
+            // Must come before any other CoreWebView2Environment call.
+            if (AppFiles.WebView2LoaderFolder != null)
+                CoreWebView2Environment.SetLoaderDllFolderPath(AppFiles.WebView2LoaderFolder);
             var environment = await CoreWebView2Environment.CreateAsync(null, Path.Combine(Settings.Folder, "WebView2"));
             await web.EnsureCoreWebView2Async(environment);
         }

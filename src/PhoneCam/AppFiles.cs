@@ -21,9 +21,19 @@ static class AppFiles
 
     public static string WebRoot => Path.Combine(Root, "wwwroot");
 
+    /// <summary>Folder of the unpacked WebView2Loader.dll; null when the loader sits next to the executable.</summary>
+    public static string? WebView2LoaderFolder { get; private set; }
+
+    // Assembly.Location is empty only inside a single-file bundle, which is exactly when to unpack.
+#pragma warning disable IL3000
+    static bool IsSingleFile => string.IsNullOrEmpty(typeof(AppFiles).Assembly.Location);
+#pragma warning restore IL3000
+
     public static void Prepare()
     {
-        if (File.Exists(AdbExe) && File.Exists(Path.Combine(WebRoot, "index.html")))
+        // A development build has everything copied next to it. The release ignores such files on purpose:
+        // copied over an older version's folder, it would otherwise run with that version's adb and page.
+        if (!IsSingleFile)
             return;
 
         var assembly = typeof(AppFiles).Assembly;
@@ -33,7 +43,14 @@ static class AppFiles
         if (!File.Exists(Path.Combine(target, CompleteMarker)))
             Unpack(assembly, target);
         Root = target;
-        RemoveOtherBuilds(appFolder, target);
+        WebView2LoaderFolder = Path.Combine(target, "webview2");
+
+        // Another running copy may still be using the files these clean-ups would delete.
+        if (Process.GetProcessesByName("PhoneCam").Length == 1)
+        {
+            RemoveOtherBuilds(appFolder, target);
+            RemoveOldRuntimeExtraction();
+        }
     }
 
     static void Unpack(Assembly assembly, string target)
@@ -71,21 +88,28 @@ static class AppFiles
 
     static void RemoveOtherBuilds(string appFolder, string current)
     {
-        // Another running copy may still be using its own folder.
-        if (Process.GetProcessesByName("PhoneCam").Length > 1)
-            return;
         foreach (string folder in Directory.GetDirectories(appFolder))
         {
-            if (string.Equals(folder, current, StringComparison.OrdinalIgnoreCase))
-                continue;
-            try
-            {
+            if (!string.Equals(folder, current, StringComparison.OrdinalIgnoreCase))
+                TryDelete(folder); // an adb server left running by an older build may still hold its files
+        }
+    }
+
+    // PhoneCam 0.1.0 and 0.1.1 bundled native libraries, which .NET extracts into %TEMP%\.net\PhoneCam
+    // (about 8 MB per version) and never removes. This build bundles none, so that folder is only leftovers.
+    static void RemoveOldRuntimeExtraction() =>
+        TryDelete(Path.Combine(Path.GetTempPath(), ".net", "PhoneCam"));
+
+    static void TryDelete(string folder)
+    {
+        try
+        {
+            if (Directory.Exists(folder))
                 Directory.Delete(folder, true);
-            }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-            {
-                // An adb server left running by an older build still holds its files: try again next time.
-            }
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // Still in use: try again on a later start.
         }
     }
 }

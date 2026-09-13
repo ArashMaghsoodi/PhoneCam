@@ -40,7 +40,9 @@ PhoneCam is a small portable Windows app in the spirit of Camo Studio, cut down 
 
 The executable is not code-signed, so the browser may ask you to confirm the download and Windows SmartScreen may say *"Windows protected your PC"*: choose *More info* → *Run anyway*.
 
-On first start PhoneCam unpacks adb and its page, about 10 MB, into `%LOCALAPPDATA%\PhoneCam\app`; later starts reuse them.
+On first start PhoneCam unpacks adb, the WebView2 loader and its page, about 10 MB, into `%LOCALAPPDATA%\PhoneCam\app`; later starts reuse them, and nothing else is written outside that folder, the settings and the log.
+
+To update, download the new `PhoneCam.exe` and replace the old one. Each version unpacks into its own folder and removes the ones left by earlier versions. Versions 0.1.0 and 0.1.1 also left about 8 MB per version in `%TEMP%\.net\PhoneCam`: version 0.1.2 and later delete that folder too.
 
 While PhoneCam is running, keep closed:
 
@@ -129,7 +131,9 @@ dotnet run --project src\PhoneCam
 .\scripts\publish.ps1
 ```
 
-A development build uses the files copied next to its executable; the release build carries them inside `PhoneCam.exe` and unpacks them on first start.
+A development build uses the files copied next to its executable; the release build carries them inside `PhoneCam.exe`, unpacks them on first start and ignores any copies it finds next to itself.
+
+The executable records the commit it was built from in its product version (for example `0.1.2+<commit>`), so `publish.ps1` refuses to run with uncommitted changes: commit, publish, then tag that commit. `-AllowDirty` skips the check for local test builds.
 
 Useful switches:
 

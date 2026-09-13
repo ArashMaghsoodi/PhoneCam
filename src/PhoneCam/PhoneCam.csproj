@@ -9,29 +9,43 @@
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <AssemblyName>PhoneCam</AssemblyName>
     <RootNamespace>PhoneCam</RootNamespace>
-    <Version>0.1.1</Version>
+    <Version>0.1.2</Version>
     <Product>PhoneCam</Product>
     <Authors>vittop89</Authors>
     <Description>Shows an Android phone camera on Windows over USB, for projectors and large screens.</Description>
     <Copyright>Copyright (c) 2026 vittop89</Copyright>
-    <!-- The UI is web-based and Italian; skip the dozens of WinForms/.NET satellite languages in the portable build. -->
+    <!-- The UI is web-based and Italian; skip the dozens of WinForms/.NET satellite languages in the release build. -->
     <SatelliteResourceLanguages>it</SatelliteResourceLanguages>
-    <!-- The WebView2 package also references its WPF assembly, which clashes with WindowsBase in a WinForms app. -->
-    <MSBuildWarningsAsMessages>$(MSBuildWarningsAsMessages);MSB3277</MSBuildWarningsAsMessages>
   </PropertyGroup>
 
   <PropertyGroup>
     <ScrcpyDir>..\..\third_party\scrcpy-win64-v4.1</ScrcpyDir>
-  </PropertyGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
-  </ItemGroup>
-
-  <PropertyGroup>
+    <WebView2Version>1.0.4191.47</WebView2Version>
     <!-- The WebView2 package's XML docs are only for the editor. -->
     <PublishReferencesDocumentationFiles>false</PublishReferencesDocumentationFiles>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="$(WebView2Version)" />
+  </ItemGroup>
+
+  <!-- The WebView2 package always references its WPF control as well. This WinForms app does not use it,
+       and it pulled in a WindowsBase conflict plus 8 MB of WPF native libraries. -->
+  <Target Name="DropWebView2WpfReference" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <Reference Remove="@(Reference)" Condition="'%(Filename)' == 'Microsoft.Web.WebView2.Wpf'" />
+    </ItemGroup>
+  </Target>
+
+  <!-- A single-file app extracts every native library it bundles into %TEMP%\.net and never cleans up.
+       The WPF natives are unused, and WebView2Loader.dll travels in the payload below instead, so the
+       release bundle ends up with nothing to extract. -->
+  <Target Name="KeepNativeLibrariesOutOfBundle" AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+        Condition="'%(Filename)%(Extension)' == 'D3DCompiler_47_cor3.dll' Or '%(Filename)%(Extension)' == 'wpfgfx_cor3.dll' Or '%(Filename)%(Extension)' == 'PresentationNative_cor3.dll' Or '%(Filename)%(Extension)' == 'PenImc_cor3.dll' Or '%(Filename)%(Extension)' == 'vcruntime140_cor3.dll' Or '%(Filename)%(Extension)' == 'WebView2Loader.dll'" />
+    </ItemGroup>
+  </Target>
 
   <!-- Development builds find these next to the executable, so web changes need no repacking. -->
   <ItemGroup>
@@ -43,7 +57,7 @@
     <None Include="$(ScrcpyDir)\LICENSE.txt" Link="tools\LICENSE-scrcpy.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Never" />
   </ItemGroup>
 
-  <!-- The release is a single PhoneCam.exe: the same files travel inside it and AppFiles unpacks them. -->
+  <!-- The release is a single PhoneCam.exe: these travel inside it and AppFiles unpacks them. -->
   <ItemGroup>
     <EmbeddedResource Include="wwwroot\**" LogicalName="payload/wwwroot/%(RecursiveDir)%(Filename)%(Extension)" WithCulture="false" />
     <EmbeddedResource Include="$(ScrcpyDir)\adb.exe" LogicalName="payload/tools/adb.exe" WithCulture="false" />
@@ -51,6 +65,7 @@
     <EmbeddedResource Include="$(ScrcpyDir)\AdbWinUsbApi.dll" LogicalName="payload/tools/AdbWinUsbApi.dll" WithCulture="false" />
     <EmbeddedResource Include="$(ScrcpyDir)\scrcpy-server" LogicalName="payload/tools/scrcpy-server" WithCulture="false" />
     <EmbeddedResource Include="$(ScrcpyDir)\LICENSE.txt" LogicalName="payload/tools/LICENSE-scrcpy.txt" WithCulture="false" />
+    <EmbeddedResource Include="$(NuGetPackageRoot)microsoft.web.webview2\$(WebView2Version)\runtimes\win-x64\native\WebView2Loader.dll" LogicalName="payload/webview2/WebView2Loader.dll" WithCulture="false" />
     <EmbeddedResource Include="..\..\LICENSE" LogicalName="payload/LICENSE.txt" WithCulture="false" />
     <EmbeddedResource Include="..\..\THIRD-PARTY-NOTICES.md" LogicalName="payload/THIRD-PARTY-NOTICES.md" WithCulture="false" />
   </ItemGroup>
