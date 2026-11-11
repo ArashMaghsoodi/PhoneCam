@@ -12,7 +12,7 @@ PhoneCam is a small portable Windows app in the spirit of Camo Studio, cut down 
 - **Every lens the phone exposes**: main, ultra-wide, macro and front cameras, each with the resolutions it declares (16:9 and 4:3, up to 4K).
 - **Frame rate and quality presets** (4 to 32 Mbit/s).
 - **Continuous autofocus**, handled by the phone.
-- **Zoom** and **torch** control.
+- **Zoom** and **torch** control; drag a zoomed image to pan, or reset it to 1×.
 - **Rotate, mirror, fit or fill** the picture.
 - **Full screen** for projectors, with a resizable side panel that can be hidden or floated over the image.
 - **Keeps streaming with the phone screen off or locked.**
@@ -60,7 +60,7 @@ Drag the sidebar edge to resize it (minimum 340 px); focus the divider and use t
 |---|---|
 | Lens | Select the phone camera |
 | Resolution, FPS, Quality | Adjust video output |
-| Zoom and light, Torch | Control zoom and the phone's torch |
+| Zoom and light, Torch | Digitally zoom with the buttons or mouse wheel, drag to pan, reset to 1×, or toggle the phone's torch |
 | Rotate, Mirror, Fill / Fit | Adjust the image |
 | Full screen | Fill the display |
 | Live | Video stream is running |
@@ -77,7 +77,7 @@ Drag the sidebar edge to resize it (minimum 340 px); focus the divider and use t
 | M | Mirror |
 | A | Fit / fill |
 
-Changing lens, resolution, frame rate or quality restarts the stream, which takes a second or two. Zoom, torch and the image controls apply immediately.
+Changing lens, resolution, frame rate or quality restarts the stream, which takes a second or two. Zoom, torch and the image controls apply immediately. Zoom is applied to the preview, so detail may decrease at high magnifications.
 
 ## Troubleshooting
 
@@ -101,7 +101,7 @@ Settings, a diagnostic log and the unpacked helper files are kept in `%LOCALAPPD
 ┌───────────────────────────────┐   USB, adb   ┌──────────────────────────────────────┐
 │ scrcpy-server (app_process)   │ ───────────► │ PhoneCam.exe (WinForms)              │
 │ camera → hardware H.264       │ ◄─────────── │   adb tunnel, scrcpy protocol parser │
-└───────────────────────────────┘  zoom, torch │ WebView2 page                        │
+└───────────────────────────────┘  torch       │ WebView2 page                        │
                                                │   WebCodecs H.264 decoding → canvas  │
                                                └──────────────────────────────────────┘
 ```
@@ -109,7 +109,7 @@ Settings, a diagnostic log and the unpacked helper files are kept in `%LOCALAPPD
 - When the phone connects, PhoneCam copies [scrcpy-server](https://github.com/Genymobile/scrcpy) to it and starts it through adb, with the camera as video source. Nothing is installed on the phone, and the server deletes its own file once started.
 - The phone encodes H.264 in hardware; the stream travels through an adb forward tunnel over the USB cable.
 - On Windows, PhoneCam parses the scrcpy 4.1 protocol and hands each packet to a WebView2 page, which decodes it with WebCodecs (hardware accelerated) and draws it on a canvas.
-- Zoom and torch commands go through the scrcpy control channel.
+- Torch commands go through the scrcpy control channel. Zoom is applied to the preview so it can be panned without restarting the camera stream.
 
 PhoneCam shows the camera on screen; it does not provide a virtual webcam for Teams, Zoom or Meet.
 

@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Web.WebView2.Core;
@@ -38,7 +37,6 @@ sealed class MainForm : Form
     bool pageReady;
     bool polling;
     bool torch;
-    double zoom = 1;
     bool startedAdbServer;
     int failures;
     DateTime nextStartAttempt = DateTime.MinValue;
@@ -147,12 +145,6 @@ sealed class MainForm : Form
                 break;
             case "view":
                 SaveViewSettings(message["settings"]);
-                break;
-            case "zoom":
-                if ((string?)message["dir"] == "in")
-                    session?.ZoomIn();
-                else
-                    session?.ZoomOut();
                 break;
             case "torch":
                 torch = (bool?)message["on"] ?? false;
@@ -335,7 +327,7 @@ sealed class MainForm : Form
             s.Failed += reason => Ui(() => OnSessionFailed(s, reason));
             droppingUntilKeyFrame = false;
             session = s;
-            await s.StartAsync(new StreamOptions(camera.Id, settings.Size, settings.Fps, settings.BitRate, torch, zoom));
+            await s.StartAsync(new StreamOptions(camera.Id, settings.Size, settings.Fps, settings.BitRate, torch));
         }
         catch (Exception ex)
         {
@@ -454,8 +446,6 @@ sealed class MainForm : Form
         settings.CameraId = cameraId;
         settings.Size = cameras.FirstOrDefault(c => c.Id == cameraId)?.PickSize(settings.Size) ?? settings.Size;
         settings.Save();
-        zoom = 1;
-        PostJson(new { type = "zoom", value = zoom });
         PostJson(new { type = "settings", settings });
     }
 
@@ -525,13 +515,6 @@ sealed class MainForm : Form
     void OnServerLine(string line)
     {
         Log("server: " + line);
-        const string zoomPrefix = "Set camera zoom: ";
-        int index = line.IndexOf(zoomPrefix, StringComparison.Ordinal);
-        if (index >= 0 && double.TryParse(line[(index + zoomPrefix.Length)..].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
-        {
-            zoom = value;
-            PostJson(new { type = "zoom", value });
-        }
     }
 
     void OnSessionFailed(CameraSession s, string reason)
@@ -573,12 +556,6 @@ sealed class MainForm : Form
         if (node == null)
             return;
         var cameraId = (string?)node["cameraId"];
-        if (cameraId != null && cameraId != settings.CameraId)
-        {
-            // Zoom ranges differ between cameras: start the new one unzoomed.
-            zoom = 1;
-            PostJson(new { type = "zoom", value = zoom });
-        }
         settings.CameraId = cameraId ?? settings.CameraId;
         settings.Size = (string?)node["size"] ?? settings.Size;
         settings.Fps = (int?)node["fps"] ?? settings.Fps;

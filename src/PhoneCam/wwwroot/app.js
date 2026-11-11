@@ -10,6 +10,11 @@ const MAX_PANEL_WIDTH = 600;
 const MIN_STAGE_WIDTH = 320;
 const settings = { cameraId: null, size: null, fps: 30, bitRate: 8000000, rotation: 0, mirror: false, fit: 'contain', panelCollapsed: false, panelWidth: MIN_PANEL_WIDTH };
 let cameras = [];
+let zoom = 1;
+let pan = { x: 0, y: 0 };
+let panStart = null;
+let lastPanEnd = 0;
+let maxZoom = 1;
 let fullscreen = false;
 let streaming = false;
 let sessionSize = '';
@@ -125,7 +130,10 @@ async function applyLanguage(code, persist = false) {
 
 const handlers = {
   settings(m) {
+    const previousCameraId = settings.cameraId;
     Object.assign(settings, m.settings);
+    if (settings.cameraId !== previousCameraId)
+      resetZoom();
     const savedPanelWidth = settings.panelWidth;
     syncPanelWidth();
     fillCameraControls();
@@ -157,6 +165,7 @@ const handlers = {
   cameras(m) {
     cameras = m.items;
     fillCameraControls();
+    syncZoomControls();
     hiddenCameraCount = m.hidden ?? 0;
     updateRestoreCameras();
   },
@@ -164,9 +173,6 @@ const handlers = {
     resetDecoder();
     streaming = true;
     sessionSize = `${formatNumber(m.width)}×${formatNumber(m.height)}`;
-  },
-  zoom(m) {
-    $('zoomValue').textContent = `${formatNumber(m.value)}×`;
   },
   streamEnded() {
     streaming = false;
@@ -242,6 +248,7 @@ function fillCameraControls() {
   $('quality').value = String(settings.bitRate);
   for (const id of ['camera', 'size', 'fps'])
     $(id).disabled = cameras.length === 0;
+  syncZoomControls();
 }
 
 let applyTimer = 0;
@@ -255,6 +262,7 @@ function applySoon() {
 
 $('camera').addEventListener('change', () => {
   settings.cameraId = $('camera').value;
+  resetZoom();
   fillCameraControls();
   applySoon();
 });
@@ -263,9 +271,98 @@ $('fps').addEventListener('change', () => { settings.fps = Number($('fps').value
 $('quality').addEventListener('change', () => { settings.bitRate = Number($('quality').value); applySoon(); });
 
 $('restoreCameras').addEventListener('click', () => send({ type: 'restoreCameras' }));
-$('zoomIn').addEventListener('click', () => send({ type: 'zoom', dir: 'in' }));
-$('zoomOut').addEventListener('click', () => send({ type: 'zoom', dir: 'out' }));
+$('zoomIn').addEventListener('click', () => changeZoom(1));
+$('zoomOut').addEventListener('click', () => changeZoom(-1));
+$('zoomReset').addEventListener('click', resetZoom);
 $('torch').addEventListener('change', () => send({ type: 'torch', on: $('torch').checked }));
+$('stage').addEventListener('wheel', event => {
+  if (event.deltaY === 0)
+    return;
+  event.preventDefault();
+  changeZoom(event.deltaY < 0 ? 1 : -1);
+}, { passive: false });
+
+function syncZoomControls() {
+  const camera = cameras.find(c => c.id === settings.cameraId);
+  maxZoom = Math.max(1, camera?.zoomMax ?? 1);
+  zoom = Math.min(zoom, maxZoom);
+  clampPan();
+  $('zoomValue').textContent = `${formatNumber(zoom)}×`;
+  $('zoomIn').disabled = zoom >= maxZoom;
+  $('zoomOut').disabled = zoom <= 1;
+  $('zoomReset').disabled = zoom <= 1 && pan.x === 0 && pan.y === 0;
+  document.body.classList.toggle('zoomed', zoom > 1);
+  syncPreviewTransform();
+}
+
+function changeZoom(direction) {
+  const nextZoom = Math.round((zoom * (direction > 0 ? 1.2 : 1 / 1.2)) * 10) / 10;
+  zoom = Math.max(1, Math.min(maxZoom, nextZoom));
+  clampPan();
+  syncZoomControls();
+}
+
+function resetZoom() {
+  zoom = 1;
+  pan = { x: 0, y: 0 };
+  syncZoomControls();
+}
+
+function clampPan() {
+  const width = $('stage').clientWidth;
+  const height = $('stage').clientHeight;
+  if (!canvas.width || !canvas.height)
+    return;
+  const scale = settings.fit === 'cover'
+    ? Math.max(width / canvas.width, height / canvas.height)
+    : Math.min(width / canvas.width, height / canvas.height);
+  const contentWidth = canvas.width * scale;
+  const contentHeight = canvas.height * scale;
+  const maxX = Math.max(0, (contentWidth * zoom - width) / 2);
+  const maxY = Math.max(0, (contentHeight * zoom - height) / 2);
+  pan.x = Math.max(-maxX, Math.min(maxX, pan.x));
+  pan.y = Math.max(-maxY, Math.min(maxY, pan.y));
+}
+
+function syncPreviewTransform() {
+  canvas.style.transform = `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`;
+  $('zoomReset').disabled = zoom <= 1 && pan.x === 0 && pan.y === 0;
+}
+
+canvas.addEventListener('pointerdown', event => {
+  if (zoom <= 1 || event.button !== 0)
+    return;
+  panStart = { x: event.clientX, y: event.clientY, panX: pan.x, panY: pan.y, pointerId: event.pointerId };
+  canvas.setPointerCapture(event.pointerId);
+  event.preventDefault();
+});
+canvas.addEventListener('pointermove', event => {
+  if (!panStart || panStart.pointerId !== event.pointerId)
+    return;
+  pan.x = panStart.panX + event.clientX - panStart.x;
+  pan.y = panStart.panY + event.clientY - panStart.y;
+  clampPan();
+  syncPreviewTransform();
+  if (pan.x !== panStart.panX || pan.y !== panStart.panY) {
+    panStart.moved = true;
+    document.body.classList.add('panning');
+  }
+});
+
+function finishPan(event) {
+  if (!panStart || panStart.pointerId !== event.pointerId)
+    return;
+  const moved = panStart.moved;
+  panStart = null;
+  document.body.classList.remove('panning');
+  if (canvas.hasPointerCapture(event.pointerId))
+    canvas.releasePointerCapture(event.pointerId);
+  if (moved)
+    lastPanEnd = Date.now();
+}
+
+canvas.addEventListener('pointerup', finishPan);
+canvas.addEventListener('pointercancel', finishPan);
 
 // ---------------------------------------------------------------- view controls
 
@@ -285,6 +382,8 @@ function toggleFit() {
 }
 
 function viewChanged() {
+  clampPan();
+  syncPreviewTransform();
   syncViewControls();
   sendView();
 }
@@ -392,6 +491,8 @@ resizeHandle.addEventListener('keydown', event => {
 window.addEventListener('resize', () => {
   const previousWidth = settings.panelWidth;
   syncPanelWidth();
+  clampPan();
+  syncPreviewTransform();
   if (settings.panelWidth !== previousWidth)
     sendView();
 });
@@ -415,7 +516,10 @@ $('rotate').addEventListener('click', rotate);
 $('mirror').addEventListener('click', toggleMirror);
 $('fit').addEventListener('click', toggleFit);
 $('fullscreen').addEventListener('click', toggleFullscreen);
-$('stage').addEventListener('dblclick', toggleFullscreen);
+$('stage').addEventListener('dblclick', () => {
+  if (Date.now() - lastPanEnd > 350)
+    toggleFullscreen();
+});
 $('hidePanel').addEventListener('click', togglePanel);
 $('showPanel').addEventListener('click', togglePanel);
 $('showPanel').addEventListener('dblclick', e => e.stopPropagation());
@@ -435,8 +539,8 @@ document.addEventListener('keydown', e => {
   if (e.target instanceof HTMLSelectElement)
     return;
   switch (e.key) {
-    case '+': case '=': send({ type: 'zoom', dir: 'in' }); break;
-    case '-': send({ type: 'zoom', dir: 'out' }); break;
+    case '+': case '=': changeZoom(1); break;
+    case '-': changeZoom(-1); break;
     case 'r': case 'R': rotate(); break;
     case 'm': case 'M': toggleMirror(); break;
     case 'a': case 'A': toggleFit(); break;
@@ -564,6 +668,8 @@ function draw() {
   if (canvas.width !== cw || canvas.height !== ch) {
     canvas.width = cw;
     canvas.height = ch;
+    clampPan();
+    syncPreviewTransform();
   }
   // Mirror in screen space, after the rotation.
   ctx.setTransform(1, 0, 0, 1, cw / 2, ch / 2);

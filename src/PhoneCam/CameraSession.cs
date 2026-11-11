@@ -4,7 +4,7 @@ using System.Net.Sockets;
 
 namespace PhoneCam;
 
-sealed record StreamOptions(string CameraId, string Size, int Fps, int BitRate, bool Torch, double Zoom);
+sealed record StreamOptions(string CameraId, string Size, int Fps, int BitRate, bool Torch);
 
 sealed record VideoPacket(byte[] Data, long Pts, bool KeyFrame, bool HasConfig);
 
@@ -19,8 +19,6 @@ sealed class CameraSession(Adb adb, string serial) : IDisposable
 
     const byte ControlResetVideo = 17;
     const byte ControlSetTorch = 18;
-    const byte ControlZoomIn = 19;
-    const byte ControlZoomOut = 20;
 
     readonly CancellationTokenSource cts = new();
     readonly object sendLock = new();
@@ -73,7 +71,7 @@ sealed class CameraSession(Adb adb, string serial) : IDisposable
             "video_source=camera", $"camera_id={options.CameraId}", $"camera_size={options.Size}",
             $"camera_fps={options.Fps}", $"video_bit_rate={options.BitRate}",
             $"camera_torch={(options.Torch ? "true" : "false")}",
-            $"camera_zoom={options.Zoom.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)}",
+            "camera_zoom=1",
             "send_device_meta=false", "clipboard_autosync=false", "power_on=false", "cleanup=true");
         serverProcess = adb.StartShell(serial, command, OnServerLine);
 
@@ -84,10 +82,6 @@ sealed class CameraSession(Adb adb, string serial) : IDisposable
         _ = Task.Run(() => ReadVideoAsync(videoClient.GetStream()));
         _ = Task.Run(() => DrainControlAsync(controlClient.GetStream()));
     }
-
-    public void ZoomIn() => SendControl(ControlZoomIn);
-
-    public void ZoomOut() => SendControl(ControlZoomOut);
 
     public void SetTorch(bool on) => SendControl(ControlSetTorch, on ? (byte)1 : (byte)0);
 
