@@ -82,7 +82,9 @@ sealed class MainForm : Form
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, "Serve Microsoft Edge WebView2 Runtime.\n\n" + ex.Message, "PhoneCam", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(this,
+                UiLocale.Get(settings.Language, "native.webViewRuntimeRequired", ("error", ex.Message)),
+                "PhoneCam", MessageBoxButtons.OK, MessageBoxIcon.Error);
             Close();
             return;
         }
@@ -95,7 +97,8 @@ sealed class MainForm : Form
         core.Settings.IsZoomControlEnabled = false;
         core.SetVirtualHostNameToFolderMapping("phonecam.example", AppFiles.WebRoot, CoreWebView2HostResourceAccessKind.Allow);
         core.WebMessageReceived += OnWebMessage;
-        core.Navigate("https://phonecam.example/index.html");
+        settings.Language = UiLocale.Normalize(settings.Language);
+        core.Navigate($"https://phonecam.example/index.html?lang={Uri.EscapeDataString(settings.Language)}");
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e)
@@ -161,6 +164,22 @@ sealed class MainForm : Form
             case "restoreCameras":
                 RestoreCameras();
                 break;
+            case "language":
+                string? language = (string?)message["language"];
+                if (!UiLocale.IsSupported(language) || settings.Language == language)
+                    break;
+                settings.Language = language!;
+                if (!settings.TrySave(out var saveError))
+                {
+                    Log("language preference save failed: " + saveError!.Message);
+                    PostJson(new
+                    {
+                        type = "notice",
+                        key = "messages.languageSaveFailed",
+                        args = new { detail = saveError.Message },
+                    });
+                }
+                break;
             case "fullscreen":
                 SetFullscreen((bool?)message["on"] ?? !fullscreen);
                 break;
@@ -185,11 +204,11 @@ sealed class MainForm : Form
         }
         if (!File.Exists(adb.ExePath) || !File.Exists(serverJar))
         {
-            SetStatus("error", "Mancano adb.exe o scrcpy-server nella cartella tools");
+            SetStatus("error", "status.missingTools");
             return;
         }
 
-        SetStatus("waiting", "Avvio adb…");
+        SetStatus("waiting", "status.startingAdb");
         try
         {
             if (!Adb.IsServerRunning())
@@ -226,11 +245,11 @@ sealed class MainForm : Form
                     PostJson(new { type = "device", model = (string?)null });
                 }
                 if (devices.Any(d => d.State == "unauthorized"))
-                    SetStatus("unauthorized", "Sul telefono tocca «Consenti» nella richiesta di debug USB");
+                    SetStatus("unauthorized", "status.waitingForPermission");
                 else if (devices.Count > 0)
-                    SetStatus("waiting", "Telefono non ancora pronto…");
+                    SetStatus("waiting", "status.deviceNotReady");
                 else
-                    SetStatus("waiting", "Collega il telefono con il cavo USB (debug USB attivo)");
+                    SetStatus("waiting", "status.connectPhone");
                 return;
             }
 
@@ -265,7 +284,7 @@ sealed class MainForm : Form
         CameraSession? starting = null;
         try
         {
-            SetStatus("starting", "Preparo il telefono…");
+            SetStatus("starting", "status.preparingPhone");
             await CameraSession.PushServerAsync(adb, deviceSerial, serverJar);
             if (camerasSerial != deviceSerial)
             {
@@ -277,7 +296,7 @@ sealed class MainForm : Form
 
             var visible = VisibleCameras();
             if (visible.Count == 0)
-                throw new InvalidOperationException("Nessun obiettivo del telefono è utilizzabile");
+                throw new InvalidOperationException("errors.noUsableLens");
             var camera = visible.FirstOrDefault(c => c.Id == settings.CameraId) ?? visible[0];
             settings.CameraId = camera.Id;
             settings.Size = camera.PickSize(settings.Size);
@@ -286,7 +305,7 @@ sealed class MainForm : Form
             sessionSize = settings.Size;
             sessionHasFrames = false;
 
-            SetStatus("starting", "Avvio fotocamera…");
+            SetStatus("starting", "status.startingCamera");
             var s = new CameraSession(adb, deviceSerial);
             starting = s;
             s.SessionStarted += (width, height) => Ui(() =>
@@ -294,7 +313,7 @@ sealed class MainForm : Form
                 if (session != s)
                     return;
                 PostJson(new { type = "session", width, height });
-                SetStatus("starting", "Attendo le immagini…");
+                SetStatus("starting", "status.waitingForFrames");
                 _ = WatchFirstFrameAsync(s);
             });
             // Only real frames prove that a lens works: the session header comes before the camera is configured.
@@ -347,7 +366,7 @@ sealed class MainForm : Form
             return;
         Log("stream: nessun fotogramma in 8 s");
         StopSession();
-        HandleFailure("Nessuna immagine dall'obiettivo");
+        HandleFailure("errors.noCameraFrame");
     }
 
     void OnFirstFrame(string cameraId)
@@ -357,7 +376,7 @@ sealed class MainForm : Form
         lastWorkingCameraId = cameraId;
         camerasWithFrames.Add(cameraId);
         cameraStrikes.Remove(cameraId);
-        SetStatus("streaming", "In diretta");
+        SetStatus("streaming", "status.live");
         if (suspectCameraId != null && suspectCameraId != cameraId)
         {
             // Another lens works right away, so the suspect really is refused by the phone.
@@ -387,7 +406,7 @@ sealed class MainForm : Form
             string? defaultSize = cameras.FirstOrDefault(c => c.Id == cameraId)?.PickSize(null);
             if (defaultSize != null && sessionSize != defaultSize)
             {
-                Notice($"L'obiettivo id {cameraId} non trasmette a {sessionSize}: provo {defaultSize}");
+                Notice("messages.lensTryingDefaultSize", new { cameraId, size = sessionSize, defaultSize });
                 settings.Size = defaultSize;
                 settings.Save();
                 PostJson(new { type = "settings", settings });
@@ -424,7 +443,7 @@ sealed class MainForm : Form
         {
             // Nothing is known to work yet: exclude this lens only if the next one delivers frames.
             suspectCameraId = cameraId;
-            Notice($"L'obiettivo id {cameraId} non trasmette: provo l'obiettivo id {fallback.Id}");
+            Notice("messages.lensTryingFallback", new { cameraId, fallbackId = fallback.Id });
         }
         SwitchCamera(fallback.Id);
         RestartSoon();
@@ -447,7 +466,7 @@ sealed class MainForm : Form
         settings.Save();
         cameraStrikes.Remove(cameraId);
         PostCameras();
-        Notice($"L'obiettivo id {cameraId} funziona solo nell'app Fotocamera del telefono: l'ho tolto dall'elenco");
+        Notice("messages.lensExcluded", new { cameraId });
     }
 
     void RestoreCameras()
@@ -466,13 +485,13 @@ sealed class MainForm : Form
     {
         failures = 0;
         nextStartAttempt = DateTime.MinValue;
-        SetStatus("starting", "Riavvio fotocamera…");
+        SetStatus("starting", "status.restartingCamera");
     }
 
-    void Notice(string text)
+    void Notice(string key, object? args = null)
     {
-        Log("notice: " + text);
-        PostJson(new { type = "notice", text });
+        Log($"notice: {key} {JsonSerializer.Serialize(args, JsonOptions)}");
+        PostJson(new { type = "notice", key, args });
     }
 
     void OnPacket(CameraSession s, VideoPacket packet)
@@ -531,7 +550,12 @@ sealed class MainForm : Form
         // Most causes are fixed by the user within seconds (closing the camera app, unlocking the phone).
         var delay = TimeSpan.FromSeconds(Math.Min(10, 3 * Math.Pow(2, failures - 1)));
         nextStartAttempt = DateTime.UtcNow + delay;
-        SetStatus("error", $"{CameraSession.FriendlyError(reason)} (nuovo tentativo tra {delay.TotalSeconds:0} s)");
+        var error = CameraSession.FriendlyError(reason);
+        SetStatus("error", "status.retry", new
+        {
+            error = new { error.Key, error.Detail },
+            seconds = delay.TotalSeconds,
+        });
     }
 
     void StopSession()
@@ -574,6 +598,7 @@ sealed class MainForm : Form
         settings.Mirror = (bool?)node["mirror"] ?? settings.Mirror;
         settings.Fit = (string?)node["fit"] ?? settings.Fit;
         settings.PanelCollapsed = (bool?)node["panelCollapsed"] ?? settings.PanelCollapsed;
+        settings.PanelWidth = Math.Clamp((int?)node["panelWidth"] ?? settings.PanelWidth, 340, 600);
         settings.Save();
     }
 
@@ -598,12 +623,13 @@ sealed class MainForm : Form
         PostJson(new { type = "fullscreen", on });
     }
 
-    void SetStatus(string state, string text)
+    void SetStatus(string state, string key, object? args = null)
     {
-        if (text != lastStatusText)
-            Log($"status {state}: {text}");
-        lastStatusText = text;
-        PostJson(new { type = "status", state, text });
+        string value = key + JsonSerializer.Serialize(args, JsonOptions);
+        if (value != lastStatusText)
+            Log($"status {state}: {value}");
+        lastStatusText = value;
+        PostJson(new { type = "status", state, key, args });
     }
 
     void PostJson(object message)
@@ -648,9 +674,9 @@ sealed class MainForm : Form
     async Task RunSelfTestAsync()
     {
         var packets = DemoStream.ReadAnnexB(selfTestInput!);
-        PostJson(new { type = "device", model = "Test (file H.264)" });
+        PostJson(new { type = "device", key = "device.testFile" });
         PostJson(new { type = "cameras", items = new[] { new CameraInfo("0", "back", 1920, 1080, [30], 1, 1, ["1920x1080"]) } });
-        SetStatus("streaming", "Test di decodifica");
+        SetStatus("streaming", "status.decoderTest");
         PostJson(new { type = "session", width = 1920, height = 1080 });
 
         var clock = Stopwatch.StartNew();

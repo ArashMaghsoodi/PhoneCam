@@ -5,7 +5,10 @@ const $ = id => document.getElementById(id);
 const canvas = $('video');
 const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
 
-const settings = { cameraId: null, size: null, fps: 30, bitRate: 8000000, rotation: 0, mirror: false, fit: 'contain', panelCollapsed: false };
+const MIN_PANEL_WIDTH = 340;
+const MAX_PANEL_WIDTH = 600;
+const MIN_STAGE_WIDTH = 320;
+const settings = { cameraId: null, size: null, fps: 30, bitRate: 8000000, rotation: 0, mirror: false, fit: 'contain', panelCollapsed: false, panelWidth: MIN_PANEL_WIDTH };
 let cameras = [];
 let fullscreen = false;
 let streaming = false;
@@ -13,6 +16,15 @@ let sessionSize = '';
 // In full screen the panel starts hidden and floats over the image; the saved choice is for the window.
 let panelOpenInFullscreen = false;
 let noticeTimer = 0;
+const supportedLanguages = ['en', 'it', 'fa'];
+let language = 'en';
+let translations = null;
+let localeRequest = 0;
+let statusMessage = { key: 'status.initializing' };
+let noticeMessage = null;
+let deviceModel = null;
+let deviceKey = null;
+let hiddenCameraCount = 0;
 
 // ---------------------------------------------------------------- host messages
 
@@ -25,42 +37,133 @@ host.addEventListener('message', event => {
   handlers[data.type]?.(data);
 });
 
+function translation(key) {
+  let value = translations;
+  for (const part of key.split('.'))
+    value = value?.[part];
+  return typeof value === 'string' ? value : null;
+}
+
+function t(key, args = {}) {
+  const template = translation(key);
+  if (template === null) {
+    console.error(`Missing translation: ${key}`);
+    return key;
+  }
+  return template.replace(/\{(\w+)\}/g, (match, name) =>
+    Object.hasOwn(args, name) ? String(args[name]) : match);
+}
+
+function localizedMessage(message) {
+  const args = { ...message.args };
+  if (typeof args.seconds === 'number')
+    args.seconds = formatNumber(args.seconds);
+  if (args.error && typeof args.error === 'object')
+    args.error = args.error.key
+      ? t(args.error.key, { detail: args.error.detail ?? '' })
+      : args.error.detail ?? '';
+  return t(message.key, args);
+}
+
+function updateStaticText() {
+  for (const element of document.querySelectorAll('[data-i18n]'))
+    element.textContent = t(element.getAttribute('data-i18n'));
+  for (const element of document.querySelectorAll('[data-i18n-title]'))
+    element.title = t(element.getAttribute('data-i18n-title'));
+  for (const element of document.querySelectorAll('[data-i18n-aria-label]'))
+    element.setAttribute('aria-label', t(element.getAttribute('data-i18n-aria-label')));
+}
+
+function updateStatus() {
+  const text = localizedMessage(statusMessage);
+  $('status').textContent = text;
+  $('placeholderText').textContent = text;
+}
+
+function updateDevice() {
+  $('device').textContent = deviceKey ? t(deviceKey) : deviceModel || t('device.none');
+}
+
+function updateRestoreCameras() {
+  const button = $('restoreCameras');
+  button.hidden = hiddenCameraCount === 0;
+  button.textContent = hiddenCameraCount === 1
+    ? t('camera.restoreOne')
+    : t('camera.restoreMany', { count: formatNumber(hiddenCameraCount) });
+}
+
+async function applyLanguage(code, persist = false) {
+  if (!supportedLanguages.includes(code))
+    throw new Error(`Unsupported language: ${code}`);
+  const request = ++localeRequest;
+  const response = await fetch(`locales/${code}.json`);
+  if (!response.ok)
+    throw new Error(`Could not load locale ${code}: HTTP ${response.status}`);
+  const dictionary = await response.json();
+  if (request !== localeRequest)
+    return;
+
+  language = code;
+  translations = dictionary;
+  document.documentElement.lang = code;
+  document.documentElement.dir = code === 'fa' ? 'rtl' : 'ltr';
+  $('language').value = code;
+  updateStaticText();
+  updateStatus();
+  updateDevice();
+  updateRestoreCameras();
+  if (noticeMessage)
+    $('notice').textContent = localizedMessage(noticeMessage);
+  if (cameras.length)
+    fillCameraControls();
+  syncViewControls();
+  syncFullscreenButton();
+  updateStats();
+  if (persist)
+    send({ type: 'language', language: code });
+}
+
 const handlers = {
   settings(m) {
     Object.assign(settings, m.settings);
+    const savedPanelWidth = settings.panelWidth;
+    syncPanelWidth();
     fillCameraControls();
     syncViewControls();
     syncPanel();
+    if (settings.panelWidth !== savedPanelWidth)
+      sendView();
   },
   notice(m) {
-    showNotice(m.text);
+    noticeMessage = m;
+    showNotice(localizedMessage(m));
   },
   status(m) {
     $('dot').dataset.state = m.state;
-    $('status').textContent = m.text;
-    $('placeholderText').textContent = m.text;
+    statusMessage = m;
+    updateStatus();
   },
   device(m) {
-    $('device').textContent = m.model || 'Nessun telefono';
+    deviceModel = m.model;
+    deviceKey = m.key;
+    updateDevice();
     if (!m.model) {
       cameras = [];
+      hiddenCameraCount = 0;
       fillCameraControls();
-      $('restoreCameras').hidden = true;
+      updateRestoreCameras();
     }
   },
   cameras(m) {
     cameras = m.items;
     fillCameraControls();
-    const hidden = m.hidden ?? 0;
-    $('restoreCameras').hidden = hidden === 0;
-    $('restoreCameras').textContent = hidden === 1
-      ? 'Mostra di nuovo l\'obiettivo escluso'
-      : `Mostra di nuovo i ${hidden} obiettivi esclusi`;
+    hiddenCameraCount = m.hidden ?? 0;
+    updateRestoreCameras();
   },
   session(m) {
     resetDecoder();
     streaming = true;
-    sessionSize = `${m.width}×${m.height}`;
+    sessionSize = `${formatNumber(m.width)}×${formatNumber(m.height)}`;
   },
   zoom(m) {
     $('zoomValue').textContent = `${formatNumber(m.value)}×`;
@@ -74,7 +177,7 @@ const handlers = {
     fullscreen = m.on;
     panelOpenInFullscreen = false;
     document.body.classList.toggle('fullscreen', fullscreen);
-    $('fullscreen').textContent = fullscreen ? 'Esci da schermo intero' : 'Schermo intero';
+    syncFullscreenButton();
     syncPanel();
   },
 };
@@ -85,23 +188,26 @@ function send(message) {
 
 // ---------------------------------------------------------------- camera controls
 
-const facingNames = { back: 'Posteriore', front: 'Anteriore', external: 'Esterna' };
-
 function cameraLabel(camera) {
   const megapixels = Math.round(camera.sensorWidth * camera.sensorHeight / 1e6);
   const zoom = camera.zoomMax > camera.zoomMin
-    ? ` · zoom ${formatNumber(camera.zoomMin)}–${formatNumber(camera.zoomMax)}×`
+    ? t('camera.zoomRange', { min: formatNumber(camera.zoomMin), max: formatNumber(camera.zoomMax) })
     : '';
-  return `${facingNames[camera.facing] ?? camera.facing} · ${megapixels} MP${zoom} (id ${camera.id})`;
+  return t('camera.cameraLabel', {
+    facing: ({ back: t('camera.facingBack'), front: t('camera.facingFront'), external: t('camera.facingExternal') })[camera.facing] ?? camera.facing,
+    megapixels: formatNumber(megapixels),
+    zoom,
+    id: camera.id,
+  });
 }
 
 function sizeLabel(width, height) {
   const ratio = width / height;
   const near = target => Math.abs(ratio - target) < 0.02;
   const aspect = near(16 / 9) ? '16:9' : near(4 / 3) ? '4:3' : near(1) ? '1:1' : `${formatNumber(ratio)}:1`;
-  const names = { 2160: '4K', 1440: '2K', 1080: 'Full HD', 720: 'HD' };
+  const names = { 2160: t('camera.format4k'), 1440: t('camera.format2k'), 1080: t('camera.formatFullHd'), 720: t('camera.formatHd') };
   const name = aspect === '16:9' && names[height] ? ` · ${names[height]}` : '';
-  return `${width}×${height} (${aspect})${name}`;
+  return t('camera.sizeLabel', { width: formatNumber(width), height: formatNumber(height), aspect, name });
 }
 
 function fillCameraControls() {
@@ -186,15 +292,21 @@ function viewChanged() {
 function sendView() {
   send({
     type: 'view',
-    settings: { rotation: settings.rotation, mirror: settings.mirror, fit: settings.fit, panelCollapsed: settings.panelCollapsed },
+    settings: { rotation: settings.rotation, mirror: settings.mirror, fit: settings.fit, panelCollapsed: settings.panelCollapsed, panelWidth: settings.panelWidth },
   });
 }
 
 function syncViewControls() {
   canvas.style.objectFit = settings.fit;
-  $('fit').textContent = settings.fit === 'contain' ? 'Riempi' : 'Adatta';
+  $('fit').textContent = t(settings.fit === 'contain' ? 'controls.fill' : 'controls.fit');
   $('mirror').setAttribute('aria-pressed', String(settings.mirror));
-  $('rotate').textContent = settings.rotation ? `Ruota ${settings.rotation}°` : 'Ruota';
+  $('rotate').textContent = settings.rotation
+    ? t('controls.rotateBy', { degrees: formatNumber(settings.rotation) })
+    : t('controls.rotate');
+}
+
+function syncFullscreenButton() {
+  $('fullscreen').textContent = t(fullscreen ? 'controls.exitFullscreen' : 'controls.fullscreen');
 }
 
 function togglePanel() {
@@ -214,12 +326,85 @@ function syncPanel() {
   $('hidePanel').setAttribute('aria-expanded', String(visible));
 }
 
+function maxPanelWidth() {
+  return Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, document.documentElement.clientWidth - MIN_STAGE_WIDTH));
+}
+
+function syncPanelWidth() {
+  settings.panelWidth = Math.round(Math.max(MIN_PANEL_WIDTH, Math.min(maxPanelWidth(), settings.panelWidth)));
+  document.documentElement.style.setProperty('--panel-width', `${settings.panelWidth}px`);
+  const handle = $('resizePanel');
+  handle.setAttribute('aria-valuemin', String(MIN_PANEL_WIDTH));
+  handle.setAttribute('aria-valuemax', String(maxPanelWidth()));
+  handle.setAttribute('aria-valuenow', String(settings.panelWidth));
+  handle.setAttribute('aria-valuetext', `${settings.panelWidth} px`);
+}
+
+let panelResizeStart = null;
+const resizeHandle = $('resizePanel');
+resizeHandle.addEventListener('pointerdown', event => {
+  if (event.button !== 0)
+    return;
+  panelResizeStart = { x: event.clientX, width: settings.panelWidth, pointerId: event.pointerId };
+  resizeHandle.setPointerCapture(event.pointerId);
+  event.preventDefault();
+});
+resizeHandle.addEventListener('pointermove', event => {
+  if (!panelResizeStart || panelResizeStart.pointerId !== event.pointerId)
+    return;
+  const direction = document.documentElement.dir === 'rtl' ? -1 : 1;
+  settings.panelWidth = panelResizeStart.width + (event.clientX - panelResizeStart.x) * direction;
+  syncPanelWidth();
+});
+
+function finishPanelResize(event) {
+  if (!panelResizeStart || panelResizeStart.pointerId !== event.pointerId)
+    return;
+  const changed = settings.panelWidth !== panelResizeStart.width;
+  panelResizeStart = null;
+  if (resizeHandle.hasPointerCapture(event.pointerId))
+    resizeHandle.releasePointerCapture(event.pointerId);
+  if (changed)
+    sendView();
+}
+
+resizeHandle.addEventListener('pointerup', finishPanelResize);
+resizeHandle.addEventListener('pointercancel', finishPanelResize);
+resizeHandle.addEventListener('keydown', event => {
+  const step = event.shiftKey ? 40 : 10;
+  let width = settings.panelWidth;
+  if (event.key === 'ArrowLeft')
+    width -= step;
+  else if (event.key === 'ArrowRight')
+    width += step;
+  else if (event.key === 'Home')
+    width = MIN_PANEL_WIDTH;
+  else if (event.key === 'End')
+    width = maxPanelWidth();
+  else
+    return;
+  event.preventDefault();
+  settings.panelWidth = width;
+  syncPanelWidth();
+  sendView();
+});
+
+window.addEventListener('resize', () => {
+  const previousWidth = settings.panelWidth;
+  syncPanelWidth();
+  if (settings.panelWidth !== previousWidth)
+    sendView();
+});
+
 function showNotice(text) {
   const notice = $('notice');
   notice.textContent = text;
   notice.hidden = false;
   clearTimeout(noticeTimer);
-  noticeTimer = setTimeout(() => { notice.hidden = true; }, 8000);
+  noticeTimer = setTimeout(() => {
+    notice.hidden = true;
+    noticeMessage = null;
+  }, 8000);
 }
 
 function toggleFullscreen() {
@@ -387,7 +572,7 @@ function draw() {
   ctx.rotate(settings.rotation * Math.PI / 180);
   ctx.drawImage(frame, -w / 2, -h / 2, w, h);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  frameSize = `${w}×${h}`;
+  frameSize = `${formatNumber(w)}×${formatNumber(h)}`;
   frame.close();
   showPlaceholder(false);
 }
@@ -435,23 +620,58 @@ function firstSliceOffset(data) {
 }
 
 const hex = value => value.toString(16).padStart(2, '0');
-const formatNumber = value => Number(value).toLocaleString('it-IT', { maximumFractionDigits: 1 });
+const formatNumber = value => Number(value).toLocaleString(language, { maximumFractionDigits: 1 });
 
 // ---------------------------------------------------------------- stats
+
+function updateStats() {
+  const fps = counters.window;
+  const size = frameSize || sessionSize;
+  $('stats').textContent = streaming && size
+    ? `${size} · ${t('stats.fps', { count: formatNumber(fps) })}${counters.dropped ? t('stats.dropped', { count: formatNumber(counters.dropped) }) : ''}`
+    : '';
+}
 
 setInterval(() => {
   const fps = counters.window;
   counters.window = 0;
-  const size = frameSize || sessionSize;
-  $('stats').textContent = streaming && size
-    ? `${size} · ${fps} fps${counters.dropped ? ` · scartati ${counters.dropped}` : ''}`
-    : '';
+  updateStats();
   send({ type: 'stats', decoded: counters.decoded, fps, dropped: counters.dropped, errors: counters.errors, lastError: counters.lastError, codec, frameSize });
 }, 1000);
 
 if (!('VideoDecoder' in window)) {
-  handlers.status({ state: 'error', text: 'Questa versione di WebView2 non decodifica video (WebCodecs assente)' });
-  send({ type: 'log', text: 'WebCodecs non disponibile' });
+  handlers.status({ state: 'error', key: 'messages.noWebCodecs' });
+  send({ type: 'log', text: 'WebCodecs is unavailable' });
 }
 
-send({ type: 'ready' });
+async function initialize() {
+  const requested = new URLSearchParams(location.search).get('lang');
+  const initialLanguage = supportedLanguages.includes(requested) ? requested : 'en';
+  try {
+    await applyLanguage(initialLanguage);
+  } catch (error) {
+    console.error('Could not initialize the selected language.', error);
+    if (initialLanguage !== 'en') {
+      try {
+        await applyLanguage('en');
+      } catch (fallbackError) {
+        console.error('Could not load the English fallback language.', fallbackError);
+      }
+    }
+  }
+
+  $('language').addEventListener('change', async () => {
+    const selected = $('language').value;
+    try {
+      await applyLanguage(selected, true);
+    } catch (error) {
+      console.error(`Could not apply language ${selected}.`, error);
+      $('language').value = language;
+      if (translations)
+        showNotice(t('messages.localeLoadFailed', { detail: error.message }));
+    }
+  });
+  send({ type: 'ready' });
+}
+
+void initialize();

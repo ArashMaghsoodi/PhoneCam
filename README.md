@@ -4,7 +4,7 @@
 
 PhoneCam is a small portable Windows app in the spirit of Camo Studio, cut down to what a classroom needs: plug the phone in, point it at a notebook, a calculator or a lab bench, and project the picture full screen with low latency.
 
-> The user interface is currently in Italian. The main labels are translated in [Using the app](#using-the-app).
+> The interface starts in English and can be switched to Italian or Persian using the language selector. The choice is saved in PhoneCam's settings; Persian uses a right-to-left layout.
 
 ## Features
 
@@ -14,7 +14,7 @@ PhoneCam is a small portable Windows app in the spirit of Camo Studio, cut down 
 - **Continuous autofocus**, handled by the phone.
 - **Zoom** and **torch** control.
 - **Rotate, mirror, fit or fill** the picture.
-- **Full screen** for projectors, with a side panel that can be hidden or floated over the image.
+- **Full screen** for projectors, with a resizable side panel that can be hidden or floated over the image.
 - **Keeps streaming with the phone screen off or locked.**
 - **Remembers your settings**, and sets aside lenses the phone refuses to stream (one click brings them back).
 - **Download and run**: a single `PhoneCam.exe`, with nothing to install or extract and no .NET installation needed.
@@ -53,14 +53,17 @@ The PC's own webcams are not used and do not get in the way.
 
 ## Using the app
 
-| Italian label | Meaning |
+Choose English, Italian, or Persian from the language selector. The interface updates immediately and remembers the selection for the next launch.
+Drag the sidebar edge to resize it (minimum 340 px); focus the divider and use the arrow keys to resize with the keyboard.
+
+| Control | Description |
 |---|---|
-| Obiettivo | Lens |
-| Risoluzione, FPS, Qualità | Resolution, frame rate, quality |
-| Zoom e luce, Torcia | Zoom and light, torch |
-| Ruota, Specchia, Riempi / Adatta | Rotate, mirror, fill / fit |
-| Schermo intero | Full screen |
-| In diretta | Live |
+| Lens | Select the phone camera |
+| Resolution, FPS, Quality | Adjust video output |
+| Zoom and light, Torch | Control zoom and the phone's torch |
+| Rotate, Mirror, Fill / Fit | Adjust the image |
+| Full screen | Fill the display |
+| Live | Video stream is running |
 
 ### Keyboard shortcuts
 
@@ -80,13 +83,13 @@ Changing lens, resolution, frame rate or quality restarts the stream, which take
 
 | What you see | What to do |
 |---|---|
-| *Collega il telefono con il cavo USB* | The phone is not detected: use a cable that carries data, try another port, check that USB debugging is on. |
-| *Sul telefono tocca «Consenti»…* | Accept the USB debugging prompt on the phone. |
-| *La fotocamera è occupata da un'altra app…* | Close the phone's Camera app or any other app using the camera. PhoneCam retries by itself. |
-| A lens disappears from the list, with a notice | The phone refused to stream that lens: some manufacturers keep extra lenses for their own camera app. *Mostra di nuovo l'obiettivo escluso* brings it back. |
-| *Il telefono non riesce a trasmettere con queste impostazioni* | The phone's encoder rejected the resolution or quality: choose a lower one. |
+| *Connect the phone with a USB cable* | The phone is not detected: use a cable that carries data, try another port, check that USB debugging is on. |
+| *Tap “Allow” on the phone's USB debugging prompt* | Accept the USB debugging prompt on the phone. |
+| *The phone's camera is in use by another app* | Close the phone's Camera app or any other app using the camera. PhoneCam retries by itself. |
+| A lens disappears from the list, with a notice | The phone refused to stream that lens: some manufacturers keep extra lenses for their own camera app. *Show excluded lens again* brings it back. |
+| *The phone cannot stream with these settings* | The phone's encoder rejected the resolution or quality: choose a lower one. |
 | The browser or Windows SmartScreen warns about `PhoneCam.exe` | The executable is not code-signed: keep the download, then *More info* → *Run anyway*. |
-| *PhoneCam non riesce a preparare i suoi file* | The helper files could not be unpacked into `%LOCALAPPDATA%\PhoneCam\app`: check free disk space and that the folder is writable. |
+| *PhoneCam could not prepare its files* | The helper files could not be unpacked into `%LOCALAPPDATA%\PhoneCam\app`: check free disk space and that the folder is writable. |
 | Black picture and 0 fps | Update or install the WebView2 Runtime; on Windows N install the Media Feature Pack. |
 
 Settings, a diagnostic log and the unpacked helper files are kept in `%LOCALAPPDATA%\PhoneCam` (`settings.json`, `phonecam.log`, `app\`).
